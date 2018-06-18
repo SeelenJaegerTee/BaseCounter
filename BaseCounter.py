@@ -10,7 +10,7 @@ from io import *
 path = 'C:/Users/NeugebauerC/Desktop/python kurs/BaseCounter/'
 out_path = path + "output.txt"
 log_path = path + 'log.txt'
-fileEndings = ['.fasta']
+fileEndings = ['.fasta', '.fastq']
 bases = 'ACGTUWSMKRYBDHVN'
 bases += bases.lower()
 
@@ -19,7 +19,7 @@ bases += bases.lower()
 # Classes
 # ---------------------------------------------------------------------------------------------------------------------
 class Config:
-    DEBUG = True
+    DEBUG = False
     CHUNK_SIZE = 65535
 
 
@@ -117,38 +117,79 @@ class File:
         position = 0
         name = ''
         buff = self.lp.next_line()
-        while buff != '':
-            if buff[0] is '>':
-                if counter > 0:
-                    self.sequences.append(Sequence(name, counter, nuc_types))
-                counter = 0
-                nuc_types = {'-': 0}
-                for c in bases:
-                    nuc_types[c] = 0
-                position = 0
-                name = buff
-            if buff[0] is not '>':
-                for c in buff:
-                    position += 1
-                    if c in bases:
-                        counter += 1
-                        nuc_types[c] += 1
-                    elif c is '-':
-                        nuc_types['-'] += 1
-                    elif c is '\n':
-                        position = 0
+        if '.fastq' in self.name:
+            last_line_was_comment = False
+            while buff != '':
+                if buff[0] is '@':
+                    if counter > 0:
+                        self.sequences.append(Sequence(name, counter, nuc_types))
+                    counter = 0
+                    nuc_types = {'-': 0}
+                    for c in bases:
+                        nuc_types[c] = 0
+                    position = 0
+                    name = buff
+                    last_line_was_comment = True
+                    buff = self.lp.next_line()
+                if buff[0] is not '@':
+                    if last_line_was_comment:
+                        for c in buff:
+                            position += 1
+                            if c in bases:
+                                counter += 1
+                                nuc_types[c] += 1
+                            elif c is '-':
+                                nuc_types['-'] += 1
+                            elif c is '\n':
+                                position = 0
+                            else:
+                                if c in nuc_types:
+                                    nuc_types[c] += 1
+                                else:
+                                    nuc_types[c] = 1
+                                warn_string = 'encountered non-nucleotide: ' + repr(c) + ' in ' + self.name \
+                                              + ' \tline: ' + str(self.lp.line) + ' \tposition: ' + str(position) \
+                                              + ' \t...' + buff[(position - 5):(position + 4)] + '...\n'
+                                with open(log_path, "a") as log:
+                                    log.write(warn_string)
+                        buff = self.lp.next_line()
+                        self.sequences.append(Sequence(name, counter, nuc_types))
+                        last_line_was_comment = False
                     else:
-                        if c in nuc_types:
+                        buff = self.lp.next_line()
+        else:
+            while buff != '':
+                if buff[0] is '>':
+                    if counter > 0:
+                        self.sequences.append(Sequence(name, counter, nuc_types))
+                    counter = 0
+                    nuc_types = {'-': 0}
+                    for c in bases:
+                        nuc_types[c] = 0
+                    position = 0
+                    name = buff
+                if buff[0] is not '>':
+                    for c in buff:
+                        position += 1
+                        if c in bases:
+                            counter += 1
                             nuc_types[c] += 1
+                        elif c is '-':
+                            nuc_types['-'] += 1
+                        elif c is '\n':
+                            position = 0
                         else:
-                            nuc_types[c] = 1
-                        warn_string = 'encountered non-nucleotide: ' + repr(c) + ' in ' + self.name \
-                                      + ' \tline: ' + str(self.lp.line) + ' \tposition: ' + str(position) \
-                                      + ' \t...' + buff[(position - 5):(position + 4)] + '...\n'
-                        with open(log_path, "a") as log:
-                            log.write(warn_string)
-            buff = self.lp.next_line()
-        self.sequences.append(Sequence(name, counter, nuc_types))
+                            if c in nuc_types:
+                                nuc_types[c] += 1
+                            else:
+                                nuc_types[c] = 1
+                            warn_string = 'encountered non-nucleotide: ' + repr(c) + ' in ' + self.name \
+                                          + ' \tline: ' + str(self.lp.line) + ' \tposition: ' + str(position) \
+                                          + ' \t...' + buff[(position - 5):(position + 4)] + '...\n'
+                            with open(log_path, "a") as log:
+                                log.write(warn_string)
+                buff = self.lp.next_line()
+            self.sequences.append(Sequence(name, counter, nuc_types))
 
     def print_size(self, verbose=True):
         print(self.name)
