@@ -1,4 +1,3 @@
-import linecache
 import os
 import datetime
 from io import *
@@ -6,8 +5,8 @@ from io import *
 # ---------------------------------------------------------------------------------------------------------------------
 # Global Variables
 # ---------------------------------------------------------------------------------------------------------------------
-# path = 'C:/Users/NeugebauerC/Desktop/20170630_run187/Analysen_JenB/'
-path = 'C:/Users/NeugebauerC/Desktop/python kurs/BaseCounter/'
+# path = 'C:/Users/NeugebauerC/Desktop/python kurs/BaseCounter/'
+path = '.'
 out_path = path + "output.txt"
 log_path = path + 'log.txt'
 fileEndings = ['.fasta', '.fastq']
@@ -87,21 +86,6 @@ class ChunkProvider:
         return ret
 
 
-# class LineProvider:
-#     def __init__(self, file_path):
-#         self.line = 0
-#         self.file_path = file_path
-#         self.pos = 0
-#
-#     def next_line(self):
-#         with open(self.file_path) as fp:
-#             fp.seek(self.pos)
-#             rtrn = fp.readline()
-#             self.line += 1
-#             self.pos = fp.tell()
-#             return rtrn
-
-
 class File:
     def __init__(self, file_path, name):
         self.name = name
@@ -118,45 +102,51 @@ class File:
         name = ''
         buff = self.lp.next_line()
         if '.fastq' in self.name:
-            last_line_was_comment = False
+            name = self.name
+            ln = 1          # 1 is comment, 2 is sequence, 3 and 4 are additional info. Then it loops back to 1
             while buff != '':
-                if buff[0] is '@':
-                    if counter > 0:
-                        self.sequences.append(Sequence(name, counter, nuc_types))
-                    counter = 0
-                    nuc_types = {'-': 0}
-                    for c in bases:
-                        nuc_types[c] = 0
+                # if buff[0] is '@':
+                if ln == 1:
+                    ln += 1
+                    # if counter > 0:     # there is probably very little use in displaying thousands of single reads
+                    #     self.sequences.append(Sequence(name, counter, nuc_types))
+                    # counter = 0
+                    # nuc_types = {'-': 0}
+                    # for c in bases:
+                    #     nuc_types[c] = 0
                     position = 0
-                    name = buff
-                    last_line_was_comment = True
+                    # name = buff
                     buff = self.lp.next_line()
-                if buff[0] is not '@':
-                    if last_line_was_comment:
-                        for c in buff:
-                            position += 1
-                            if c in bases:
-                                counter += 1
+                elif ln == 2:
+                    ln += 1
+                    for c in buff:
+                        position += 1
+                        if c in bases:
+                            counter += 1
+                            nuc_types[c] += 1
+                        elif c is '-':
+                            nuc_types['-'] += 1
+                        elif c is '\n':
+                            position = 0
+                        else:
+                            if c in nuc_types:
                                 nuc_types[c] += 1
-                            elif c is '-':
-                                nuc_types['-'] += 1
-                            elif c is '\n':
-                                position = 0
                             else:
-                                if c in nuc_types:
-                                    nuc_types[c] += 1
-                                else:
-                                    nuc_types[c] = 1
-                                warn_string = 'encountered non-nucleotide: ' + repr(c) + ' in ' + self.name \
-                                              + ' \tline: ' + str(self.lp.line) + ' \tposition: ' + str(position) \
-                                              + ' \t...' + buff[(position - 5):(position + 4)] + '...\n'
-                                with open(log_path, "a") as log:
-                                    log.write(warn_string)
-                        buff = self.lp.next_line()
-                        self.sequences.append(Sequence(name, counter, nuc_types))
-                        last_line_was_comment = False
-                    else:
-                        buff = self.lp.next_line()
+                                nuc_types[c] = 1
+                            warn_string = 'encountered non-nucleotide: ' + repr(c) + ' in ' + self.name \
+                                          + ' \tline: ' + str(self.lp.line) + ' \tposition: ' + str(position) \
+                                          + ' \t...' + buff[(position - 5):(position + 4)] + '...\n'
+                            with open(log_path, "a") as log:
+                                log.write(warn_string)
+                    buff = self.lp.next_line()
+                    # self.sequences.append(Sequence(name, counter, nuc_types))     # not displaying thousands of reads
+                elif ln == 3:
+                    ln += 1
+                    buff = self.lp.next_line()
+                elif ln == 4:
+                    ln = 1
+                    buff = self.lp.next_line()
+            self.sequences.append(Sequence(name, counter, nuc_types))               # only displaying total count
         else:
             while buff != '':
                 if buff[0] is '>':
@@ -232,12 +222,28 @@ class Sequence:
                 out_string += key+': '+str(self.nuc_types[key])+'\n'
             elif self.nuc_types[key] != 0:
                 out_string += key + ': ' + str(self.nuc_types[key]) + '\n'
+        max_GC = 0
+        min_GC = 0
+        for key in self.nuc_types:
+            if key.upper() in 'GC':
+                min_GC += self.nuc_types[key]
+            elif key.upper() in 'SMKRYBDHVN':
+                max_GC += self.nuc_types[key]
+        max_GC += min_GC
+        print(self.bases, min_GC, min_GC/self.bases)
+        out_string += 'GC content between:\n' + 'GC min: ' + "{0:.4f}".format(min_GC/self.bases*100) + '% and GC max: '\
+                      + "{0:.4f}".format(max_GC/self.bases*100) + '%\n'
         out_file.write(out_string)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Script
 # ---------------------------------------------------------------------------------------------------------------------
+if path == '.':
+    path = (os.getcwd()+'\\').replace('\\', '/')
+    out_path = path + "output.txt"
+    log_path = path + 'log.txt'
+
 files_index = os.listdir(path)
 t1 = datetime.datetime.now()
 with open(out_path, 'w') as fp:
@@ -277,5 +283,6 @@ for file in inFiles:
         file.write_size(fp, verbose=True)
 t2 = datetime.datetime.now()
 with open(out_path, "a") as fp:
-    fp.write('\n\n time to finish:'+str(t2 - t1))
+    fp.write('\n\ntime to finish:'+str(t2 - t1))
 print('job is finished, have a nice day!')
+print('time to execute:', str(t2 - t1))
