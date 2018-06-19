@@ -230,7 +230,6 @@ class Sequence:
             elif key.upper() in 'SMKRYBDHVN':
                 max_GC += self.nuc_types[key]
         max_GC += min_GC
-        print(self.bases, min_GC, min_GC/self.bases)
         out_string += 'GC content between:\n' + 'GC min: ' + "{0:.4f}".format(min_GC/self.bases*100) + '% and GC max: '\
                       + "{0:.4f}".format(max_GC/self.bases*100) + '%\n'
         out_file.write(out_string)
@@ -284,5 +283,5 @@ for file in inFiles:
 t2 = datetime.datetime.now()
 with open(out_path, "a") as fp:
     fp.write('\n\ntime to finish:'+str(t2 - t1))
-print('job is finished, have a nice day!')
+print('job is finished, have a nice day!\nfor more detailed output see output.txt')
 print('time to execute:', str(t2 - t1))
